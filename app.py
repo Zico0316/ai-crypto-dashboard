@@ -15,7 +15,7 @@ st.set_page_config(page_title="AI 智慧投資決策平台", page_icon="📈", l
 # --- 2. 自訂 CSS (含排版修正、黑色文字、防閃爍、側邊欄全白修正) ---
 st.markdown("""
 <style>
-    /* === 左側側邊欄 (深色背景 + 強制全白字) === */
+    /* === 左側側邊欄 === */
     [data-testid="stSidebar"] { background-color: #12141C; }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #FFFFFF !important; }
     [data-testid="stSidebar"] span, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label { color: #E0E0E0 !important; font-weight: 500; }
@@ -75,13 +75,10 @@ except FileNotFoundError:
         ai_status = "⚠️ 無金鑰"
         has_key = False
 
-# --- 4. 數據獲取 (改用 KuCoin 避免被美國伺服器阻擋) ---
+# --- 4. 數據獲取 ---
 @st.cache_resource
 def get_exchange():
-    # [修改重點] 換成 kucoin，解決 Streamlit 雲端伺服器抓不到資料的問題
-    exchange = ccxt.kucoin({
-        'enableRateLimit': True,
-    })
+    exchange = ccxt.kucoin({'enableRateLimit': True})
     exchange.ssl_verification = False
     return exchange
 
@@ -93,7 +90,7 @@ def fetch_market_data(symbol):
         df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return ticker, df
-    except Exception as e:
+    except Exception:
         return None, pd.DataFrame()
 
 # --- 5. 繪圖函數 ---
@@ -122,7 +119,7 @@ def plot_gauge_high_contrast(value, title):
     fig.update_layout(height=300, margin=dict(l=30,r=30,t=60,b=20), paper_bgcolor="rgba(0,0,0,0)", font={'color': "black"})
     return fig
 
-# --- 6. 定義即時區塊 Fragment (雲端穩定版) ---
+# --- 6. 定義即時區塊 Fragment ---
 @st.fragment(run_every=10)
 def show_live_header(symbol):
     ticker, _ = fetch_market_data(symbol)
@@ -143,7 +140,6 @@ def show_live_header(symbol):
             </div>
             """, unsafe_allow_html=True)
     else:
-        # [修改重點] 如果抓不到資料，不再顯示空白，而是顯示錯誤警告
         st.error("⚠️ 無法連線至交易所取得即時報價，請稍候重試。")
 
 @st.fragment(run_every=30)
@@ -207,7 +203,6 @@ with st.sidebar:
 if page_selection == "📊 戰情首頁":
     show_live_header(symbol)
 
-    # 靜態 TradingView (這裡維持 Binance，因為只有圖表前端載入不受影響)
     tv_symbol = f"BINANCE:{symbol.replace('/', '')}"
     tv_code = f"""
     <div class="tradingview-widget-container">
@@ -238,7 +233,7 @@ elif page_selection == "🧠 AI 投資教練":
             st.rerun()
             
     st.markdown(f"目前分析幣種：**{symbol}**")
-    chat_container = st.container(height=600)
+    chat_container = st.container(height=500)
 
     for message in st.session_state.messages:
         with chat_container.chat_message(message["role"]):
@@ -249,20 +244,26 @@ elif page_selection == "🧠 AI 投資教練":
         with chat_container.chat_message("user"):
             st.write(prompt)
             
-        ticker, df = fetch_market_data(symbol)
-        if ticker and not df.empty:
-            df.ta.rsi(length=14, append=True)
-            latest = df.iloc[-1]
-            ctx = f"商品: {symbol}, 現價: {latest['close']}, RSI: {latest['RSI_14']:.2f}"
-            sys = f"你是專業交易員。數據背景: {ctx}。用戶問題: {prompt}。請給出專業、簡短的建議。"
+        with st.spinner("教練思考中..."):
+            # 確保不管抓不抓得到價格，AI都會回答
+            ticker, df = fetch_market_data(symbol)
+            if ticker and not df.empty:
+                df.ta.rsi(length=14, append=True)
+                latest = df.iloc[-1]
+                ctx = f"商品: {symbol}, 現價: {latest['close']}, RSI: {latest['RSI_14']:.2f}"
+                sys = f"你是專業加密貨幣交易員。數據背景: {ctx}。用戶問題: {prompt}。請給出專業、客觀的建議。"
+            else:
+                sys = f"你是專業加密貨幣交易員。目前無法取得 {symbol} 的即時報價。用戶問題: {prompt}。請給出專業建議。"
             
             if has_key:
                 try:
-                    with st.spinner("教練思考中..."):
-                        model = genai.GenerativeModel('gemini-flash-latest')
-                        reply = model.generate_content(sys).text
-                except: reply = "連線錯誤，請稍後再試。"
-            else: reply = "請先在雲端設定 Gemini API Key。"
+                    # 使用最新的標準模型名稱 gemini-1.5-flash
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    reply = model.generate_content(sys).text
+                except Exception as e:
+                    reply = f"🚨 AI 連線發生錯誤 (請檢查 API Key 額度或網路): {e}"
+            else:
+                reply = "⚠️ 請先在雲端後台設定 Gemini API Key。"
             
             st.session_state.messages.append({"role": "assistant", "content": reply})
             st.rerun()
@@ -300,12 +301,13 @@ elif page_selection == "🛡️ 詐騙檢測":
                         inputs = ["你是頂尖的金融反詐騙專家，請依據提供的資訊分析：1. 詐騙風險等級 (極高/中/低)。 2. 具體疑點解析。 3. 給使用者的防範建議。請排版清晰。", scam_text]
                         if img_preview: inputs.append(img_preview)
                         
-                        model = genai.GenerativeModel('gemini-flash-latest')
+                        # 使用最新的標準模型名稱 gemini-1.5-flash
+                        model = genai.GenerativeModel('gemini-1.5-flash')
                         res = model.generate_content(inputs)
                         st.success("分析完成！請看下方報告 👇")
                         st.info(res.text)
                     except Exception as e:
-                        st.error(f"分析過程發生錯誤: {e}")
+                        st.error(f"分析過程發生錯誤 (請檢查 API Key): {e}")
                         
         if st.button("🗑️ 清除所有內容", key="clear_scam", use_container_width=True):
             st.session_state["scam_text"] = ""   
