@@ -256,8 +256,8 @@ elif page_selection == "🧠 AI 投資教練":
             
             if has_key:
                 try:
-                    # [重點修正] 改回最穩定的模型名稱
-                    model = genai.GenerativeModel('gemini-flash-latest')
+                    # [替換為最新的模型]
+                    model = genai.GenerativeModel('gemini-3-flash-preview')
                     reply = model.generate_content(sys).text
                 except Exception as e:
                     reply = f"🚨 AI 連線發生錯誤 (請檢查 API Key 額度或網路): {e}"
@@ -300,8 +300,8 @@ elif page_selection == "🛡️ 詐騙檢測":
                         inputs = ["你是頂尖的金融反詐騙專家，請依據提供的資訊分析：1. 詐騙風險等級 (極高/中/低)。 2. 具體疑點解析。 3. 給使用者的防範建議。請排版清晰。", scam_text]
                         if img_preview: inputs.append(img_preview)
                         
-                        # [重點修正] 改回最穩定的模型名稱
-                        model = genai.GenerativeModel('gemini-flash-latest')
+                        # [替換為最新的模型]
+                        model = genai.GenerativeModel('gemini-3-flash-preview')
                         res = model.generate_content(inputs)
                         st.success("分析完成！請看下方報告 👇")
                         st.info(res.text)
