@@ -272,4 +272,85 @@ elif page_selection == "🧠 AI 投資教練":
     chat_container = st.container(height=600)
 
     for message in st.session_state.messages:
-        with chat_
+        with chat_container.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    if prompt := st.chat_input("向教練提問（例如：現在適合進場嗎？）..."):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with chat_container.chat_message("user"):
+            st.write(prompt)
+            
+        ticker, df = fetch_market_data(symbol)
+        if ticker and not df.empty:
+            df.ta.rsi(length=14, append=True)
+            latest = df.iloc[-1]
+            ctx = f"商品: {symbol}, 現價: {latest['close']}, RSI: {latest['RSI_14']:.2f}"
+            sys = f"你是專業交易員。數據背景: {ctx}。用戶問題: {prompt}。請給出專業、簡短的建議。"
+            
+            if has_key:
+                try:
+                    with st.spinner("教練思考中..."):
+                        model = genai.GenerativeModel('gemini-flash-latest')
+                        reply = model.generate_content(sys).text
+                except: reply = "連線錯誤，請稍後再試。"
+            else: reply = "系統尚未設定有效的 API Key。"
+            
+            st.session_state.messages.append({"role": "assistant", "content": reply})
+            st.rerun()
+
+
+elif page_selection == "🛡️ 詐騙檢測":
+    st.title("🛡️ 風險與詐騙掃描")
+    st.markdown("將可疑的投資訊息或截圖上傳，讓 AI 幫您分析風險。")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        scam_text = st.text_area("1️⃣ 貼上可疑文字或網址", height=150, key="scam_text")
+        
+        dynamic_key = f"scam_image_{st.session_state['uploader_key']}"
+        scam_image = st.file_uploader("2️⃣ 上傳對話或網站截圖", type=["jpg", "png"], key=dynamic_key)
+        
+        img_preview = None
+        if scam_image:
+            try:
+                img_preview = Image.open(scam_image)
+                st.success("✅ 圖片上傳成功！") 
+                st.image(img_preview, caption="圖片預覽", use_container_width=True)
+            except Exception as e:
+                st.error(f"❌ 圖片無法讀取：{e}")
+
+    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🔍 立即分析風險", type="primary", use_container_width=True):
+            if not has_key:
+                st.error("請先在雲端後台 Settings -> Secrets 設定 Gemini API Key。")
+            elif not scam_text and not img_preview:
+                st.warning("請至少輸入文字或上傳一張圖片！")
+            else:
+                with st.spinner("AI 正在深度掃描風險特徵..."):
+                    try:
+                        inputs = ["你是頂尖的金融反詐騙專家，請依據提供的資訊分析：1. 詐騙風險等級 (極高/中/低)。 2. 具體疑點解析。 3. 給使用者的防範建議。請排版清晰。", scam_text]
+                        if img_preview: inputs.append(img_preview)
+                        
+                        model = genai.GenerativeModel('gemini-flash-latest')
+                        res = model.generate_content(inputs)
+                        st.success("分析完成！請看下方報告 👇")
+                        st.info(res.text)
+                    except Exception as e:
+                        st.error(f"分析過程發生錯誤: {e}")
+                        
+        if st.button("🗑️ 清除所有內容", key="clear_scam", use_container_width=True):
+            st.session_state["scam_text"] = ""   
+            st.session_state["uploader_key"] += 1 
+            st.rerun()
+
+# ==========================================
+#  共用頁尾
+# ==========================================
+st.divider()
+st.markdown("""
+<div class="footer">
+    資料來源：Binance 交易所 (透過 CCXT API) | 圖表提供：TradingView | AI 模型：Google Gemini
+</div>
+""", unsafe_allow_html=True)
