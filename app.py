@@ -257,7 +257,7 @@ elif page_selection == "🧠 AI 投資教練":
             if has_key:
                 try:
                     # [替換為最新的模型]
-                    model = genai.GenerativeModel('gemini-3-flash-preview')
+                    model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
                     reply = model.generate_content(sys).text
                 except Exception as e:
                     reply = f"🚨 AI 連線發生錯誤 (請檢查 API Key 額度或網路): {e}"
