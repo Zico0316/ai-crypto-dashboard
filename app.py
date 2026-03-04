@@ -15,7 +15,7 @@ st.set_page_config(page_title="AI 智慧投資決策平台", page_icon="📈", l
 # --- 2. 自訂 CSS (含排版修正、黑色文字、防閃爍、側邊欄全白修正) ---
 st.markdown("""
 <style>
-    /* === 左側側邊欄 === */
+    /* === 左側側邊欄 (深色背景 + 強制全白字) === */
     [data-testid="stSidebar"] { background-color: #12141C; }
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #FFFFFF !important; }
     [data-testid="stSidebar"] span, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label { color: #E0E0E0 !important; font-weight: 500; }
@@ -245,7 +245,6 @@ elif page_selection == "🧠 AI 投資教練":
             st.write(prompt)
             
         with st.spinner("教練思考中..."):
-            # 確保不管抓不抓得到價格，AI都會回答
             ticker, df = fetch_market_data(symbol)
             if ticker and not df.empty:
                 df.ta.rsi(length=14, append=True)
@@ -257,8 +256,8 @@ elif page_selection == "🧠 AI 投資教練":
             
             if has_key:
                 try:
-                    # 使用最新的標準模型名稱 gemini-1.5-flash
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    # [重點修正] 改回最穩定的模型名稱
+                    model = genai.GenerativeModel('gemini-flash-latest')
                     reply = model.generate_content(sys).text
                 except Exception as e:
                     reply = f"🚨 AI 連線發生錯誤 (請檢查 API Key 額度或網路): {e}"
@@ -301,8 +300,8 @@ elif page_selection == "🛡️ 詐騙檢測":
                         inputs = ["你是頂尖的金融反詐騙專家，請依據提供的資訊分析：1. 詐騙風險等級 (極高/中/低)。 2. 具體疑點解析。 3. 給使用者的防範建議。請排版清晰。", scam_text]
                         if img_preview: inputs.append(img_preview)
                         
-                        # 使用最新的標準模型名稱 gemini-1.5-flash
-                        model = genai.GenerativeModel('gemini-1.5-flash')
+                        # [重點修正] 改回最穩定的模型名稱
+                        model = genai.GenerativeModel('gemini-flash-latest')
                         res = model.generate_content(inputs)
                         st.success("分析完成！請看下方報告 👇")
                         st.info(res.text)
