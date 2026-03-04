@@ -16,46 +16,21 @@ st.set_page_config(page_title="AI 智慧投資決策平台", page_icon="📈", l
 st.markdown("""
 <style>
     /* === 左側側邊欄 (深色背景 + 強制全白字) === */
-    [data-testid="stSidebar"] {
-        background-color: #12141C;
-    }
-    
-    /* 針對側邊欄標題 */
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        color: #FFFFFF !important;
-    }
-    
-    /* 針對普通文字、Label */
-    [data-testid="stSidebar"] span, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
-        color: #E0E0E0 !important;
-        font-weight: 500;
-    }
-
-    /* 強制讓 AI 回答的 Markdown 內容全部變白 */
-    [data-testid="stSidebar"] .stMarkdown p, 
-    [data-testid="stSidebar"] .stMarkdown li, 
-    [data-testid="stSidebar"] .stMarkdown ul,
-    [data-testid="stSidebar"] .stMarkdown ol,
-    [data-testid="stSidebar"] .stMarkdown strong,
-    [data-testid="stSidebar"] .stMarkdown code {
+    [data-testid="stSidebar"] { background-color: #12141C; }
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { color: #FFFFFF !important; }
+    [data-testid="stSidebar"] span, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label { color: #E0E0E0 !important; font-weight: 500; }
+    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown li, [data-testid="stSidebar"] .stMarkdown ul,
+    [data-testid="stSidebar"] .stMarkdown ol, [data-testid="stSidebar"] .stMarkdown strong, [data-testid="stSidebar"] .stMarkdown code {
         color: #FFFFFF !important;
     }
     
     /* === 右側主畫面文字 === */
-    [data-testid="stMetricValue"] {
-        font-size: 26px; font-weight: 800; color: #000000 !important;
-    }
-    [data-testid="stMetricLabel"] {
-        font-size: 15px; color: #444444 !important; font-weight: 600;
-    }
+    [data-testid="stMetricValue"] { font-size: 26px; font-weight: 800; color: #000000 !important; }
+    [data-testid="stMetricLabel"] { font-size: 15px; color: #444444 !important; font-weight: 600; }
     
     /* 數據框 */
-    div[data-testid="stInfo"] {
-        background-color: #F0F2F6; border: 1px solid #D1D5DB; color: #000000;
-    }
-    div[data-testid="stInfo"] p {
-        font-size: 16px !important; font-weight: bold !important; color: #000000 !important;
-    }
+    div[data-testid="stInfo"] { background-color: #F0F2F6; border: 1px solid #D1D5DB; color: #000000; }
+    div[data-testid="stInfo"] p { font-size: 16px !important; font-weight: bold !important; color: #000000 !important; }
 
     /* 頁尾 */
     .footer {
@@ -67,18 +42,13 @@ st.markdown("""
     /* 頂部邊距 */
     .block-container { padding-top: 3rem; padding-bottom: 5rem; }
 
-    /* 防閃爍 */
-    .element-container, .stMarkdown, .stMetric {
-        opacity: 1 !important; transition: none !important; filter: none !important;
-    }
+    /* === 防閃爍 === */
+    .element-container, .stMarkdown, .stMetric { opacity: 1 !important; transition: none !important; filter: none !important; }
     
     /* Live 呼吸燈動畫 */
-    @keyframes pulse {
-        0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; }
-    }
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
     .live-indicator {
-        display: inline-block; width: 10px; height: 10px;
-        background-color: #00AA00; border-radius: 50%;
+        display: inline-block; width: 10px; height: 10px; background-color: #00AA00; border-radius: 50%;
         margin-right: 5px; animation: pulse 1.5s infinite;
     }
 </style>
@@ -105,12 +75,12 @@ except FileNotFoundError:
         ai_status = "⚠️ 無金鑰"
         has_key = False
 
-# --- 4. 數據獲取 (快取連線) ---
+# --- 4. 數據獲取 (改用 KuCoin 避免被美國伺服器阻擋) ---
 @st.cache_resource
 def get_exchange():
-    exchange = ccxt.binance({
+    # [修改重點] 換成 kucoin，解決 Streamlit 雲端伺服器抓不到資料的問題
+    exchange = ccxt.kucoin({
         'enableRateLimit': True,
-        'options': {'defaultType': 'spot'}
     })
     exchange.ssl_verification = False
     return exchange
@@ -123,7 +93,7 @@ def fetch_market_data(symbol):
         df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return ticker, df
-    except Exception:
+    except Exception as e:
         return None, pd.DataFrame()
 
 # --- 5. 繪圖函數 ---
@@ -153,12 +123,11 @@ def plot_gauge_high_contrast(value, title):
     return fig
 
 # --- 6. 定義即時區塊 Fragment (雲端穩定版) ---
-# [修改重點] 將 run_every 放寬為 10 秒，減輕雲端伺服器負擔，避免變成空白
 @st.fragment(run_every=10)
 def show_live_header(symbol):
     ticker, _ = fetch_market_data(symbol)
     if ticker:
-        price_change = ticker['percentage']
+        price_change = ticker.get('percentage', 0)
         color = "#00AA00" if price_change >= 0 else "#FF0000"
         c1, c2 = st.columns([2, 8])
         with c1: st.title(f"{symbol}")
@@ -173,8 +142,10 @@ def show_live_header(symbol):
                 </div>
             </div>
             """, unsafe_allow_html=True)
+    else:
+        # [修改重點] 如果抓不到資料，不再顯示空白，而是顯示錯誤警告
+        st.error("⚠️ 無法連線至交易所取得即時報價，請稍候重試。")
 
-# [修改重點] 將儀表板重新運算放寬為 30 秒
 @st.fragment(run_every=30)
 def show_live_analysis(symbol):
     ticker, df = fetch_market_data(symbol)
@@ -186,10 +157,11 @@ def show_live_analysis(symbol):
         close_price, rsi = latest['close'], latest['RSI_14']
         
         osc_score = 50
-        if rsi < 30: osc_score = 90
-        elif rsi < 45: osc_score = 70
-        elif rsi > 70: osc_score = 10
-        elif rsi > 55: osc_score = 30
+        if pd.notna(rsi):
+            if rsi < 30: osc_score = 90
+            elif rsi < 45: osc_score = 70
+            elif rsi > 70: osc_score = 10
+            elif rsi > 55: osc_score = 30
         
         ma_score = 50
         ma_score += 25 if close_price > latest['SMA_50'] else -25
@@ -200,7 +172,7 @@ def show_live_analysis(symbol):
         g1, g2, g3 = st.columns(3)
         with g1: 
             st.plotly_chart(plot_gauge_high_contrast(osc_score, "震盪指標"), use_container_width=True)
-            st.info(f"RSI (14): {rsi:.2f}") 
+            st.info(f"RSI (14): {rsi:.2f}" if pd.notna(rsi) else "RSI: 計算中") 
         with g2: 
             st.plotly_chart(plot_gauge_high_contrast(summary_score, "總結"), use_container_width=True)
             st.info(f"綜合評分: {summary_score:.0f} / 100")
@@ -211,21 +183,20 @@ def show_live_analysis(symbol):
 
         st.markdown("### 📊 24H 統計數據")
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("最高價", f"${ticker['high']:,.2f}")
-        k2.metric("最低價", f"${ticker['low']:,.2f}")
-        k3.metric("成交量", f"{ticker['baseVolume']:,.2f}")
-        k4.metric("成交額", f"${ticker['quoteVolume']/1000000:.2f} M")
+        k1.metric("最高價", f"${ticker.get('high', 0):,.2f}")
+        k2.metric("最低價", f"${ticker.get('low', 0):,.2f}")
+        k3.metric("成交量", f"{ticker.get('baseVolume', 0):,.2f}")
+        k4.metric("成交額", f"計算中" if ticker.get('quoteVolume') is None else f"${ticker.get('quoteVolume')/1000000:.2f} M")
+    else:
+        st.warning("⚠️ 正在重新載入技術分析數據...")
 
 # ==========================================
 #  側邊欄 (導覽選單)
 # ==========================================
 with st.sidebar:
     st.header("🎛️ 主選單")
-    
     page_selection = st.radio("前往頁面", ["📊 戰情首頁", "🧠 AI 投資教練", "🛡️ 詐騙檢測"])
-    
     st.divider()
-    
     symbol = st.selectbox("監控幣種", ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT'])
     st.markdown(f"**AI 狀態:** <span style='color:#00EEAA'>{ai_status}</span>", unsafe_allow_html=True)
 
@@ -236,7 +207,7 @@ with st.sidebar:
 if page_selection == "📊 戰情首頁":
     show_live_header(symbol)
 
-    # 靜態 TradingView
+    # 靜態 TradingView (這裡維持 Binance，因為只有圖表前端載入不受影響)
     tv_symbol = f"BINANCE:{symbol.replace('/', '')}"
     tv_code = f"""
     <div class="tradingview-widget-container">
@@ -257,7 +228,6 @@ if page_selection == "📊 戰情首頁":
 
     show_live_analysis(symbol)
 
-
 elif page_selection == "🧠 AI 投資教練":
     c1, c2 = st.columns([8, 2])
     with c1:
@@ -268,7 +238,6 @@ elif page_selection == "🧠 AI 投資教練":
             st.rerun()
             
     st.markdown(f"目前分析幣種：**{symbol}**")
-
     chat_container = st.container(height=600)
 
     for message in st.session_state.messages:
@@ -293,11 +262,10 @@ elif page_selection == "🧠 AI 投資教練":
                         model = genai.GenerativeModel('gemini-flash-latest')
                         reply = model.generate_content(sys).text
                 except: reply = "連線錯誤，請稍後再試。"
-            else: reply = "系統尚未設定有效的 API Key。"
+            else: reply = "請先在雲端設定 Gemini API Key。"
             
             st.session_state.messages.append({"role": "assistant", "content": reply})
             st.rerun()
-
 
 elif page_selection == "🛡️ 詐騙檢測":
     st.title("🛡️ 風險與詐騙掃描")
@@ -307,7 +275,6 @@ elif page_selection == "🛡️ 詐騙檢測":
     
     with col1:
         scam_text = st.text_area("1️⃣ 貼上可疑文字或網址", height=150, key="scam_text")
-        
         dynamic_key = f"scam_image_{st.session_state['uploader_key']}"
         scam_image = st.file_uploader("2️⃣ 上傳對話或網站截圖", type=["jpg", "png"], key=dynamic_key)
         
@@ -351,6 +318,6 @@ elif page_selection == "🛡️ 詐騙檢測":
 st.divider()
 st.markdown("""
 <div class="footer">
-    資料來源：Binance 交易所 (透過 CCXT API) | 圖表提供：TradingView | AI 模型：Google Gemini
+    資料來源：KuCoin 交易所 (透過 CCXT API) | 圖表提供：TradingView | AI 模型：Google Gemini
 </div>
 """, unsafe_allow_html=True)
