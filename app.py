@@ -301,7 +301,7 @@ elif page_selection == "🛡️ 詐騙檢測":
                         if img_preview: inputs.append(img_preview)
                         
                         # [替換為最新的模型]
-                        model = genai.GenerativeModel('gemini-3-flash-preview')
+                        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
                         res = model.generate_content(inputs)
                         st.success("分析完成！請看下方報告 👇")
                         st.info(res.text)
