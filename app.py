@@ -12,23 +12,32 @@ from datetime import datetime
 # --- 1. 網頁基本設定 ---
 st.set_page_config(page_title="AI 智慧投資決策平台", page_icon="📈", layout="wide")
 
-# --- 2. 自訂 CSS ---
+# --- 2. 自訂 CSS (含排版修正、黑色文字、防閃爍、側邊欄全白修正) ---
 st.markdown("""
 <style>
-    /* === 左側側邊欄 === */
+    /* === 左側側邊欄 (深色背景 + 強制全白字) === */
     [data-testid="stSidebar"] {
         background-color: #12141C;
     }
+    
+    /* 針對側邊欄標題 */
     [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
         color: #FFFFFF !important;
     }
+    
+    /* 針對普通文字、Label */
     [data-testid="stSidebar"] span, [data-testid="stSidebar"] p, [data-testid="stSidebar"] label {
         color: #E0E0E0 !important;
         font-weight: 500;
     }
-    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] .stMarkdown li, 
-    [data-testid="stSidebar"] .stMarkdown ul, [data-testid="stSidebar"] .stMarkdown ol,
-    [data-testid="stSidebar"] .stMarkdown strong, [data-testid="stSidebar"] .stMarkdown code {
+
+    /* 強制讓 AI 回答的 Markdown 內容全部變白 */
+    [data-testid="stSidebar"] .stMarkdown p, 
+    [data-testid="stSidebar"] .stMarkdown li, 
+    [data-testid="stSidebar"] .stMarkdown ul,
+    [data-testid="stSidebar"] .stMarkdown ol,
+    [data-testid="stSidebar"] .stMarkdown strong,
+    [data-testid="stSidebar"] .stMarkdown code {
         color: #FFFFFF !important;
     }
     
@@ -143,8 +152,9 @@ def plot_gauge_high_contrast(value, title):
     fig.update_layout(height=300, margin=dict(l=30,r=30,t=60,b=20), paper_bgcolor="rgba(0,0,0,0)", font={'color': "black"})
     return fig
 
-# --- 6. 定義即時區塊 Fragment ---
-@st.fragment(run_every=1)
+# --- 6. 定義即時區塊 Fragment (雲端穩定版) ---
+# [修改重點] 將 run_every 放寬為 10 秒，減輕雲端伺服器負擔，避免變成空白
+@st.fragment(run_every=10)
 def show_live_header(symbol):
     ticker, _ = fetch_market_data(symbol)
     if ticker:
@@ -164,7 +174,8 @@ def show_live_header(symbol):
             </div>
             """, unsafe_allow_html=True)
 
-@st.fragment(run_every=2)
+# [修改重點] 將儀表板重新運算放寬為 30 秒
+@st.fragment(run_every=30)
 def show_live_analysis(symbol):
     ticker, df = fetch_market_data(symbol)
     if ticker and not df.empty:
@@ -211,12 +222,10 @@ def show_live_analysis(symbol):
 with st.sidebar:
     st.header("🎛️ 主選單")
     
-    # [修改重點] 使用 radio 按鈕作為主要頁面切換器
-    page_selection = st.radio("前往頁面", ["📊首頁", "🧠 AI 投資教練", "🛡️ 詐騙檢測"])
+    page_selection = st.radio("前往頁面", ["📊 戰情首頁", "🧠 AI 投資教練", "🛡️ 詐騙檢測"])
     
     st.divider()
     
-    # 幣種選擇器保留在側邊欄，讓所有頁面都能共用這個設定
     symbol = st.selectbox("監控幣種", ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT'])
     st.markdown(f"**AI 狀態:** <span style='color:#00EEAA'>{ai_status}</span>", unsafe_allow_html=True)
 
@@ -224,7 +233,7 @@ with st.sidebar:
 #  主畫面 (根據側邊欄選單動態切換)
 # ==========================================
 
-if page_selection == "📊首頁":
+if page_selection == "📊 戰情首頁":
     show_live_header(symbol)
 
     # 靜態 TradingView
@@ -250,104 +259,17 @@ if page_selection == "📊首頁":
 
 
 elif page_selection == "🧠 AI 投資教練":
-    # --- 獨立頁面：AI 教練 ---
     c1, c2 = st.columns([8, 2])
     with c1:
         st.title("🧠 AI 投資教練")
     with c2:
-        # 清除按鈕移到主畫面右上角
         if st.button("🗑️ 清除對話", key="clear_coach", use_container_width=True):
             st.session_state.messages = []
             st.rerun()
             
     st.markdown(f"目前分析幣種：**{symbol}**")
 
-    # 聊天視窗放大
     chat_container = st.container(height=600)
 
     for message in st.session_state.messages:
-        with chat_container.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("向教練提問（例如：現在適合進場嗎？）..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with chat_container.chat_message("user"):
-            st.write(prompt)
-            
-        # 觸發 AI 邏輯
-        ticker, df = fetch_market_data(symbol)
-        if ticker and not df.empty:
-            df.ta.rsi(length=14, append=True)
-            latest = df.iloc[-1]
-            ctx = f"商品: {symbol}, 現價: {latest['close']}, RSI: {latest['RSI_14']:.2f}"
-            sys = f"你是專業交易員。數據背景: {ctx}。用戶問題: {prompt}。請給出專業、簡短的建議。"
-            
-            if has_key:
-                try:
-                    with st.spinner("教練思考中..."):
-                        model = genai.GenerativeModel('gemini-flash-latest')
-                        reply = model.generate_content(sys).text
-                except: reply = "連線錯誤，請稍後再試。"
-            else: reply = "系統尚未設定有效的 API Key。"
-            
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-            st.rerun()
-
-
-elif page_selection == "🛡️ 詐騙檢測":
-    # --- 獨立頁面：詐騙檢測 ---
-    st.title("🛡️ 風險與詐騙掃描")
-    st.markdown("將可疑的投資訊息或截圖上傳，讓 AI 幫您分析風險。")
-    
-    # 左右排版：左邊放輸入區，右邊放按鈕與結果
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        scam_text = st.text_area("1️⃣ 貼上可疑文字或網址", height=150, key="scam_text")
-        
-        dynamic_key = f"scam_image_{st.session_state['uploader_key']}"
-        scam_image = st.file_uploader("2️⃣ 上傳對話或網站截圖", type=["jpg", "png"], key=dynamic_key)
-        
-        img_preview = None
-        if scam_image:
-            try:
-                img_preview = Image.open(scam_image)
-                st.success("✅ 圖片上傳成功！") 
-                st.image(img_preview, caption="圖片預覽", use_container_width=True)
-            except Exception as e:
-                st.error(f"❌ 圖片無法讀取：{e}")
-
-    with col2:
-        st.markdown("<br>", unsafe_allow_html=True) # 稍微往下推齊
-        if st.button("🔍 立即分析風險", type="primary", use_container_width=True):
-            if not has_key:
-                st.error("請先在左側設定 Gemini API Key。")
-            elif not scam_text and not img_preview:
-                st.warning("請至少輸入文字或上傳一張圖片！")
-            else:
-                with st.spinner("AI 正在深度掃描風險特徵..."):
-                    try:
-                        inputs = ["你是頂尖的金融反詐騙專家，請依據提供的資訊分析：1. 詐騙風險等級 (極高/中/低)。 2. 具體疑點解析。 3. 給使用者的防範建議。請排版清晰。", scam_text]
-                        if img_preview: inputs.append(img_preview)
-                        
-                        model = genai.GenerativeModel('gemini-flash-latest')
-                        res = model.generate_content(inputs)
-                        st.success("分析完成！請看下方報告 👇")
-                        st.info(res.text)
-                    except Exception as e:
-                        st.error(f"分析過程發生錯誤: {e}")
-                        
-        if st.button("🗑️ 清除所有內容", key="clear_scam", use_container_width=True):
-            st.session_state["scam_text"] = ""   
-            st.session_state["uploader_key"] += 1 
-            st.rerun()
-
-# ==========================================
-#  共用頁尾
-# ==========================================
-st.divider()
-st.markdown("""
-<div class="footer">
-    資料來源：Binance 交易所 (透過 CCXT API) | 圖表提供：TradingView | AI 模型：Google Gemini
-</div>
-""", unsafe_allow_html=True)
+        with chat_
